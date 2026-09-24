@@ -1,0 +1,17 @@
+node_modules
+.next
+out
+dist
+coverage
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+services/analysis/.venv
+services/analysis/__pycache__
+services/analysis/.pytest_cache
+.uploads
+*.db
+*.sqlite

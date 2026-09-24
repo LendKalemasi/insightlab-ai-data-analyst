@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --chart-primary: theme('colors.teal');
+  --chart-grid: theme('colors.line');
+  --chart-muted: theme('colors.muted');
+  --chart-surface: theme('colors.surface');
+  --chart-ink: theme('colors.ink');
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  @apply bg-canvas text-ink font-sans antialiased;
+  min-height: 100vh;
+}
+button, input { font: inherit; }
+button { @apply cursor-pointer; transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+button:not(:disabled):hover { transform: translateY(-1px); }
+button:disabled { @apply cursor-not-allowed; }
+:focus-visible { @apply outline-none ring-2 ring-cobalt ring-offset-2 ring-offset-canvas; }
+
+.app-shell { animation: app-in 360ms ease both; }
+.topbar { @apply border-b border-line bg-surface; }
+.panel { @apply rounded-panel border border-line bg-surface; }
+.workspace-nav { @apply border-cobalt/20 bg-ink text-surface; }
+.question-panel { @apply border-l-4 border-l-cobalt bg-surface shadow-panel; }
+.dataset-overview { @apply border-b border-line bg-surface; }
+.inspector-panel { @apply bg-surface; }
+.dataset-stat { @apply min-w-[104px] border border-line bg-canvas; }
+.data-table-wrap { scrollbar-color: theme('colors.line') transparent; }
+.data-table { @apply min-w-[680px] text-code; }
+.data-table tbody tr { @apply transition-colors; }
+.data-table tbody tr:hover { @apply bg-canvas; }
+.code-block { scrollbar-color: theme('colors.line') transparent; }
+.execution-rail { @apply border border-line bg-canvas; }
+.execution-node { @apply relative flex min-w-0 flex-1 flex-col items-start gap-1.5; }
+.execution-dot-row { @apply relative flex w-full items-center; }
+.execution-node:not(:last-child) .execution-dot-row::after { content: ''; @apply absolute left-5 right-[-0.5rem] top-1/2 h-px -translate-y-1/2 bg-line; }
+.execution-node.is-complete:not(:last-child) .execution-dot-row::after { @apply bg-teal; }
+.execution-dot { @apply relative z-[1] h-5 w-5 shrink-0 rounded-full border-2 border-line bg-surface; }
+.execution-node.is-active .execution-dot { @apply border-cobalt bg-cobalt ring-4 ring-cobalt/15; }
+.execution-node.is-complete .execution-dot { @apply border-teal bg-teal; }
+.execution-node.is-attention .execution-dot { @apply border-copper bg-copper; }
+.execution-label { @apply text-meta text-muted; }
+.execution-node.is-active .execution-label { @apply font-semibold text-cobalt; }
+.execution-node.is-complete .execution-label { @apply text-teal; }
+.execution-node.is-attention .execution-label { @apply text-copper; }
+.question-input { @apply border-line bg-surface text-ink; }
+.question-input::placeholder { @apply text-quiet; }
+.question-input:focus { @apply border-cobalt shadow-focus outline-none; }
+.suggestion-chip { @apply rounded-full border border-line bg-canvas px-3 py-2 text-left text-meta text-muted; }
+.suggestion-chip:hover { @apply border-cobalt/60 bg-cobalt/5 text-cobalt; }
+.result-card { @apply border-teal/30 shadow-panel; }
+.result-answer { max-width: 62rem; }
+.stable-chart { min-height: 330px; }
+.stable-skeleton { min-height: 156px; }
+
+@keyframes app-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .app-shell { animation: none; }
+  button { transition: none; }
+}

@@ -1,0 +1,28 @@
+services:
+  web:
+    build: { context: ., dockerfile: Dockerfile.web }
+    ports: ["3000:3000"]
+    environment:
+      - PYTHON_SERVICE_URL=http://analysis:8000
+      - LLM_PROVIDER=${LLM_PROVIDER:-local}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-claude-sonnet-4-6}
+      - LLM_TIMEOUT_MS=${LLM_TIMEOUT_MS:-20000}
+      - MAX_UPLOAD_BYTES=${MAX_UPLOAD_BYTES:-5242880}
+      - MAX_QUERY_ROWS=${MAX_QUERY_ROWS:-1000}
+      - QUERY_TIMEOUT_MS=${QUERY_TIMEOUT_MS:-10000}
+      - PYTHON_TIMEOUT_MS=${PYTHON_TIMEOUT_MS:-15000}
+    depends_on: [analysis]
+  analysis:
+    build: { context: ./services/analysis }
+    # No published port: reachable only on the compose network.
+    expose: ["8000"]
+    # Defence in depth for the code sandbox.
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    pids_limit: 64
+    # network_mode is intentionally NOT "none": web must reach it.
+    # The service itself blocks outbound sockets at the Python layer.
