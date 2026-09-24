@@ -18,7 +18,7 @@
   `AnthropicPlanner` adapter; `guardPlan` validates every plan column against the real schema.
 - **Four-layer SQL safety** and a **FastAPI Python sandbox** (AST allowlist, forked child,
   `setrlimit`, cleared environment, reduced builtins, output caps).
-- **Tests**: 54 Vitest, 17 Pytest, an 18-check HTTP smoke suite, and a Playwright suite that has not
+- **Tests**: 54 Vitest, 18 Pytest, an 18-check HTTP smoke suite, and a Playwright suite that has not
   yet been run.
 - Docs: `README.md`, `PORTFOLIO_STATUS.md`, this file, `.env.example`, `.gitignore`, MIT `LICENSE`,
   `docker-compose.yml` and two Dockerfiles.
@@ -30,7 +30,7 @@
 | `npm run typecheck` | clean |
 | `npm run build` | compiled successfully, 9 routes |
 | `npm test` | 54 passed / 54 |
-| `pytest tests -q` (sandbox) | 17 passed / 17 |
+| `pytest tests -q` (sandbox) | 18 passed / 18 |
 | `node scripts/smoke.mjs` (HTTP) | 18 passed / 18 |
 | Unsafe SQL rejection | verified (5 statement classes over HTTP, 9 in unit tests) |
 | Unsafe Python rejection | verified (imports, eval/exec/open/getattr, dunder walking, timeout) |

@@ -15,7 +15,7 @@ This is a **portfolio-quality v0.1.0, not a production system**.
 | TypeScript compilation | `npm run typecheck` | **clean — no errors** |
 | Next.js production build | `npm run build` | **compiled successfully**, 9 routes |
 | TypeScript unit tests | `npm test` | **54 passed / 54** |
-| Python tests | `pytest tests -q` | **17 passed / 17** |
+| Python tests | `pytest tests -q` | **18 passed / 18** |
 | HTTP smoke suite | `node scripts/smoke.mjs` | **18 passed / 18** |
 
 ### What the smoke suite proved against a running server

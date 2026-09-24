@@ -168,7 +168,7 @@ npm test                                    # Vitest — 54 tests
 npm run build                               # production build
 npm start & npm run smoke                   # 18 HTTP checks against a running server
 npm run test:e2e                            # Playwright (run `npx playwright install chromium` first)
-cd services/analysis && pytest tests -q     # Pytest — 17 tests
+cd services/analysis && pytest tests -q     # Pytest — 18 tests
 ```
 
 `npm run smoke` covers demo load, CSV upload and profiling, a real analysis, five unsafe-SQL

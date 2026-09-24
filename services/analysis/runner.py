@@ -4,8 +4,9 @@ Isolation layers, weakest to strongest:
   1. validate_code() rejects disallowed imports, calls and dunder access.
   2. Execution happens in a forked child, so a crash or OOM cannot take down
      the service, and the child is killed on deadline.
-  3. The child applies RLIMIT_CPU, RLIMIT_AS and RLIMIT_NPROC (NPROC=0 blocks
-     fork/subprocess), and clears os.environ so secrets are unreachable.
+  3. The child applies RLIMIT_CPU and RLIMIT_NPROC (NPROC=0 blocks
+    fork/subprocess), clears os.environ so secrets are unreachable, and applies
+      an address-space budget after scientific libraries are loaded.
   4. Only `pd`, `np` and `df` are exposed; __builtins__ is a reduced mapping.
   5. Output is capped and serialised to JSON; arbitrary objects never escape.
 
@@ -32,10 +33,24 @@ MEMORY_LIMIT_BYTES = 512 * 1024 * 1024
 
 def _apply_limits(cpu_seconds: int) -> None:
     resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))
-    resource.setrlimit(resource.RLIMIT_AS, (MEMORY_LIMIT_BYTES, MEMORY_LIMIT_BYTES))
     resource.setrlimit(resource.RLIMIT_NPROC, (0, 0))   # no fork, no subprocess
     resource.setrlimit(resource.RLIMIT_FSIZE, (0, 0))   # no file writes
     os.environ.clear()                                   # no secrets in the child
+
+
+def _apply_memory_limit() -> None:
+    """Leave room for NumPy/Pandas mappings, then cap analysis allocations."""
+    try:
+        with open('/proc/self/statm', encoding='ascii') as statm:
+            virtual_pages = int(statm.readline().split()[0])
+        current_virtual_bytes = virtual_pages * os.sysconf('SC_PAGE_SIZE')
+    except (FileNotFoundError, OSError, ValueError, IndexError):
+        current_virtual_bytes = 0
+    limit = current_virtual_bytes + MEMORY_LIMIT_BYTES
+    _, hard_limit = resource.getrlimit(resource.RLIMIT_AS)
+    if hard_limit != resource.RLIM_INFINITY:
+        limit = min(limit, hard_limit)
+    resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
 
 
 def _child(code: str, dataset: dict[str, Any], cpu_seconds: int, conn) -> None:
@@ -45,6 +60,7 @@ def _child(code: str, dataset: dict[str, Any], cpu_seconds: int, conn) -> None:
         import pandas as pd
 
         df = pd.DataFrame(dataset["rows"], columns=dataset["columns"])
+        _apply_memory_limit()
         safe_builtins = {
             k: __builtins__[k] if isinstance(__builtins__, dict) else getattr(__builtins__, k)
             for k in ("len", "range", "sum", "min", "max", "abs", "round", "sorted",
