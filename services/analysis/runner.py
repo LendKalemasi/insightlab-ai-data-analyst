@@ -31,9 +31,10 @@ MAX_STDOUT_CHARS = 10_000
 MEMORY_LIMIT_BYTES = 512 * 1024 * 1024
 
 
-def _apply_limits(cpu_seconds: int) -> None:
+def _apply_limits(cpu_seconds: int, *, block_process_creation: bool = False) -> None:
     resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))
-    resource.setrlimit(resource.RLIMIT_NPROC, (0, 0))   # no fork, no subprocess
+    if block_process_creation:
+        resource.setrlimit(resource.RLIMIT_NPROC, (0, 0))   # no fork, no subprocess
     resource.setrlimit(resource.RLIMIT_FSIZE, (0, 0))   # no file writes
     os.environ.clear()                                   # no secrets in the child
 
@@ -60,6 +61,9 @@ def _child(code: str, dataset: dict[str, Any], cpu_seconds: int, conn) -> None:
         import pandas as pd
 
         df = pd.DataFrame(dataset["rows"], columns=dataset["columns"])
+        # Scientific libraries may create worker threads during import or frame
+        # construction. Block new processes only once that setup is complete.
+        _apply_limits(cpu_seconds, block_process_creation=True)
         _apply_memory_limit()
         safe_builtins = {
             k: __builtins__[k] if isinstance(__builtins__, dict) else getattr(__builtins__, k)
