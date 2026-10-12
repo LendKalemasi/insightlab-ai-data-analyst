@@ -7,6 +7,8 @@ on:
 jobs:
   web:
     runs-on: ubuntu-latest
+    env:
+      LLM_PROVIDER: local
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,6 +19,13 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: HTTP smoke test
+        run: |
+          DATA_DIR=.data-smoke npx next start -p 3000 &
+          for i in $(seq 1 30); do curl -sf http://localhost:3000/api/status > /dev/null && break; sleep 1; done
+          npm run smoke
 
   analysis:
     runs-on: ubuntu-latest

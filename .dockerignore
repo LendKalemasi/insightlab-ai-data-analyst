@@ -12,6 +12,7 @@ coverage
 services/analysis/.venv
 services/analysis/__pycache__
 services/analysis/.pytest_cache
-.uploads
+.data
 *.db
 *.sqlite
+.data-e2e

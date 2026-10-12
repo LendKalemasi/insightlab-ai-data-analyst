@@ -1,42 +1,88 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Browser test of the workspace flow. Requires a running server and
- * `npx playwright install chromium`.
+ * End-to-end tests of the real UI against a running server. They work in
+ * either planner mode: assertions target computed results, which are the
+ * same whether or not an AI key is configured.
  */
-test('demo dataset loads, answers a question and exposes SQL', async ({ page }) => {
+
+async function openDemo(page: Page) {
   await page.goto('/');
-  await expect(page.getByText('InsightLab', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Open demo dataset' }).click();
+  await expect(page).toHaveURL(/\/datasets\/ds_[a-f0-9]{32}$/, { timeout: 30_000 });
+  await expect(page.getByText('Rows', { exact: true })).toBeVisible();
+}
 
-  await page.getByRole('button', { name: 'Load demo dataset' }).click();
-  await expect(page.getByText('Dataset ready')).toBeVisible({ timeout: 20_000 });
+test('demo: overview, ask a question, inspect SQL, and the conversation survives a reload', async ({ page }) => {
+  await openDemo(page);
+  await expect(page.getByRole('heading', { name: 'Data quality' })).toBeVisible();
+  await expect(page.getByText(/region is missing \d+ values/)).toBeVisible();
 
-  // Suggested questions are derived from the detected schema.
-  const suggestion = page.getByRole('button', { name: /changed over time/ });
-  await expect(suggestion).toBeVisible();
-  await suggestion.click();
-
-  await expect(page.getByText(/In this dataset, revenue moved from/)).toBeVisible({ timeout: 30_000 });
-
-  await page.getByLabel('Question').fill('Which category has the highest profit?');
-  await page.getByRole('button', { name: 'Analyze' }).click();
-  await expect(page.getByText(/leads on total profit/)).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText('How has revenue changed over time?', { exact: true })).toBeVisible();
-  await expect(page.getByText('Which category has the highest profit?', { exact: true })).toHaveCount(2);
+  await page.getByRole('navigation', { name: 'Workspace' }).first().getByRole('link', { name: 'Ask' }).click();
+  await expect(page.getByRole('heading', { name: 'What would you like to know?' })).toBeVisible();
+  await page.getByRole('button', { name: 'How has revenue changed over time?' }).click();
+  await expect(page.getByText('Calculated from your data')).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText(/Total revenue went from [\d,]+ in 2025-01 to [\d,]+ in 2025-09/)).toBeVisible();
+  await expect(page.getByRole('img', { name: /Line chart of total revenue/ })).toBeVisible();
 
   await page.getByRole('tab', { name: 'SQL' }).click();
-  await expect(page.locator('pre')).toContainText('SELECT');
+  await expect(page.locator('pre')).toContainText('SELECT substr("date", 1, 7)');
 
-  await page.getByRole('tab', { name: 'Trace' }).click();
-  await expect(page.getByText('execute_read_only_sql')).toBeVisible();
+  await page.reload();
+  await expect(page.getByText('How has revenue changed over time?', { exact: true })).toBeVisible();
+  await expect(page.getByText('1 question · saved with this dataset')).toBeVisible();
 });
 
-test('an off-topic question is refused rather than answered', async ({ page }) => {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Load demo dataset' }).click();
-  await expect(page.getByText('Dataset ready')).toBeVisible({ timeout: 20_000 });
+test('questions the data cannot answer are declined, not invented', async ({ page }) => {
+  await openDemo(page);
+  await page.goto(`${page.url()}/ask`);
+  const box = page.getByLabel(/Ask a question about/);
+  await box.fill('What is the weather forecast for Tirana tomorrow?');
+  await box.press('Enter');
+  await expect(page.getByText(/Cannot answer from this data|Needs clarification/)).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText('Calculated from your data')).toHaveCount(0);
+});
 
-  await page.getByLabel('Question').fill('What is the weather forecast for Tirana?');
-  await page.getByRole('button', { name: 'Analyze' }).click();
-  await expect(page.getByText(/cannot be answered from the available columns/)).toBeVisible({ timeout: 30_000 });
+test('upload a CSV, browse and search the rows', async ({ page }) => {
+  await page.goto('/');
+  const csv = 'city,sales,day\nBremen,100,2025-01-01\nTirana,250,2025-01-02\nBremen,,2025-01-03\nOslo,75,2025-01-04\n';
+  await page.locator('input[type="file"]').setInputFiles({ name: 'cities.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
+  await expect(page).toHaveURL(/\/datasets\/ds_/, { timeout: 30_000 });
+  await expect(page.getByRole('button', { name: 'sales', exact: true })).toBeVisible();
+  await expect(page.getByText(/sales is missing 1 value/)).toBeVisible();
+
+  await page.goto(`${page.url()}/data`);
+  await expect(page.getByText('4 rows')).toBeVisible();
+  await page.getByLabel('Search rows').fill('bremen');
+  await expect(page.getByText('2 rows of 4')).toBeVisible();
+});
+
+test('invalid uploads explain what went wrong', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('input[type="file"]').setInputFiles({ name: 'notes.json', mimeType: 'application/json', buffer: Buffer.from('{}') });
+  await expect(page.getByRole('alert').filter({ hasText: 'Could not import' })).toContainText('not a supported file');
+  await page.locator('input[type="file"]').setInputFiles({ name: 'empty.csv', mimeType: 'text/csv', buffer: Buffer.from('a,b\n') });
+  await expect(page.getByRole('alert').filter({ hasText: 'Could not import' })).toContainText('no data rows');
+});
+
+test('the SQL editor runs SELECTs and refuses writes', async ({ page }) => {
+  await openDemo(page);
+  await page.goto(`${page.url()}/sql`);
+  const editor = page.getByLabel('SQL query');
+  await editor.fill('SELECT region, COUNT(*) AS n FROM dataset GROUP BY region');
+  await page.getByRole('button', { name: 'Run' }).click();
+  await expect(page.getByText(/5 rows in \d+ ms/)).toBeVisible();
+  await editor.fill('DELETE FROM dataset');
+  await editor.press('Control+Enter');
+  await expect(page.getByText('Query failed')).toBeVisible();
+});
+
+test('mobile layout has no horizontal page scroll', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Ask your data a question' })).toBeVisible();
+  const overflow = await page.evaluate(() => document.body.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  await openDemo(page);
+  expect(await page.evaluate(() => document.body.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
 });

@@ -1,41 +1,61 @@
 import type { Config } from 'tailwindcss';
 
+/** Every colour is a semantic token defined in globals.css for light and dark themes. */
+const token = (name: string) => `rgb(var(--${name}) / <alpha-value>)`;
+
 export default {
   content: ['./src/**/*.{ts,tsx}'],
+  darkMode: ['selector', '[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
-        canvas: '#F3F6F8',
-        ink: '#17212B',
-        surface: '#FFFFFF',
-        surface2: '#E8EEF2',
-        cobalt: '#284BC7',
-        teal: '#287C78',
-        copper: '#C96B43',
-        line: '#D3DCE3',
-        muted: '#617180',
-        quiet: '#8A99A5',
-        danger: '#A94442',
+        bg: token('bg'),
+        surface: token('surface'),
+        sunken: token('sunken'),
+        line: token('line'),
+        'line-strong': token('line-strong'),
+        fg: token('fg'),
+        muted: token('muted'),
+        subtle: token('subtle'),
+        primary: token('primary'),
+        'primary-fg': token('primary-fg'),
+        'primary-soft': token('primary-soft'),
+        success: token('success'),
+        'success-soft': token('success-soft'),
+        warning: token('warning'),
+        'warning-soft': token('warning-soft'),
+        danger: token('danger'),
+        'danger-soft': token('danger-soft'),
+        ai: token('ai'),
+        'ai-soft': token('ai-soft'),
       },
       fontFamily: {
-        sans: ['var(--font-sans)', 'IBM Plex Sans', 'Segoe UI', 'sans-serif'],
-        mono: ['var(--font-mono)', 'IBM Plex Mono', 'ui-monospace', 'monospace'],
+        sans: ['var(--font-sans)', 'system-ui', 'Segoe UI', 'sans-serif'],
+        mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
       fontSize: {
-        display: ['2rem', { lineHeight: '2.25rem', letterSpacing: '-0.03em', fontWeight: '600' }],
-        title: ['1.75rem', { lineHeight: '2.125rem', letterSpacing: '-0.025em', fontWeight: '600' }],
-        heading: ['1.25rem', { lineHeight: '1.625rem', letterSpacing: '-0.015em', fontWeight: '600' }],
-        body: ['0.9375rem', { lineHeight: '1.4375rem', fontWeight: '400' }],
-        meta: ['0.75rem', { lineHeight: '1rem', fontWeight: '500' }],
-        code: ['0.8125rem', { lineHeight: '1.25rem', fontWeight: '400' }],
-      },
-      boxShadow: {
-        panel: '0 10px 30px rgba(23, 33, 43, 0.07)',
-        focus: '0 0 0 3px rgba(40, 75, 199, 0.18)',
+        '2xs': ['0.6875rem', { lineHeight: '1rem' }],
       },
       borderRadius: {
-        panel: '10px',
-        control: '7px',
+        sm: '6px',
+        DEFAULT: '8px',
+        md: '8px',
+        lg: '12px',
+        xl: '16px',
+      },
+      boxShadow: {
+        card: '0 1px 2px rgb(var(--shadow) / 0.06), 0 1px 3px rgb(var(--shadow) / 0.04)',
+        pop: '0 12px 32px rgb(var(--shadow) / 0.16), 0 2px 6px rgb(var(--shadow) / 0.08)',
+      },
+      keyframes: {
+        'fade-up': { from: { opacity: '0', transform: 'translateY(6px)' }, to: { opacity: '1', transform: 'none' } },
+        shimmer: { from: { backgroundPosition: '200% 0' }, to: { backgroundPosition: '-200% 0' } },
+        'slide-in': { from: { transform: 'translateX(16px)', opacity: '0' }, to: { transform: 'none', opacity: '1' } },
+      },
+      animation: {
+        'fade-up': 'fade-up 220ms ease-out both',
+        shimmer: 'shimmer 1.6s linear infinite',
+        'slide-in': 'slide-in 200ms ease-out both',
       },
     },
   },

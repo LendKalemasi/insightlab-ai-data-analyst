@@ -14,7 +14,9 @@ __pycache__/
 *.py[cod]
 .venv/
 .pytest_cache/
-.uploads/
+.data/
 *.db
 *.sqlite
 .DS_Store
+.data-e2e/
+.data-smoke/

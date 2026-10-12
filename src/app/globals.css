@@ -2,65 +2,119 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Design tokens. Colours are RGB channels so Tailwind can apply opacity.
+ * Text tokens meet WCAG AA (4.5:1) on both surface and bg in each theme;
+ * `subtle` is for icons and placeholders only.
+ */
 :root {
   color-scheme: light;
-  --chart-primary: theme('colors.teal');
-  --chart-grid: theme('colors.line');
-  --chart-muted: theme('colors.muted');
-  --chart-surface: theme('colors.surface');
-  --chart-ink: theme('colors.ink');
-}
-* { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
-body {
-  @apply bg-canvas text-ink font-sans antialiased;
-  min-height: 100vh;
-}
-button, input { font: inherit; }
-button { @apply cursor-pointer; transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
-button:not(:disabled):hover { transform: translateY(-1px); }
-button:disabled { @apply cursor-not-allowed; }
-:focus-visible { @apply outline-none ring-2 ring-cobalt ring-offset-2 ring-offset-canvas; }
+  --bg: 247 248 250;
+  --surface: 255 255 255;
+  --sunken: 241 243 246;
+  --line: 227 230 235;
+  --line-strong: 203 209 218;
+  --fg: 15 23 42;
+  --muted: 84 94 110;
+  --subtle: 138 147 163;
+  --primary: 37 76 201;
+  --primary-fg: 255 255 255;
+  --primary-soft: 236 241 254;
+  --success: 15 118 87;
+  --success-soft: 230 246 239;
+  --warning: 166 82 6;
+  --warning-soft: 253 243 225;
+  --danger: 190 49 43;
+  --danger-soft: 253 236 235;
+  --ai: 107 70 193;
+  --ai-soft: 243 239 253;
+  --shadow: 15 23 42;
 
-.app-shell { animation: app-in 360ms ease both; }
-.topbar { @apply border-b border-line bg-surface; }
-.panel { @apply rounded-panel border border-line bg-surface; }
-.workspace-nav { @apply border-cobalt/20 bg-ink text-surface; }
-.question-panel { @apply border-l-4 border-l-cobalt bg-surface shadow-panel; }
-.dataset-overview { @apply border-b border-line bg-surface; }
-.inspector-panel { @apply bg-surface; }
-.dataset-stat { @apply min-w-[104px] border border-line bg-canvas; }
-.data-table-wrap { scrollbar-color: theme('colors.line') transparent; }
-.data-table { @apply min-w-[680px] text-code; }
-.data-table tbody tr { @apply transition-colors; }
-.data-table tbody tr:hover { @apply bg-canvas; }
-.code-block { scrollbar-color: theme('colors.line') transparent; }
-.execution-rail { @apply border border-line bg-canvas; }
-.execution-node { @apply relative flex min-w-0 flex-1 flex-col items-start gap-1.5; }
-.execution-dot-row { @apply relative flex w-full items-center; }
-.execution-node:not(:last-child) .execution-dot-row::after { content: ''; @apply absolute left-5 right-[-0.5rem] top-1/2 h-px -translate-y-1/2 bg-line; }
-.execution-node.is-complete:not(:last-child) .execution-dot-row::after { @apply bg-teal; }
-.execution-dot { @apply relative z-[1] h-5 w-5 shrink-0 rounded-full border-2 border-line bg-surface; }
-.execution-node.is-active .execution-dot { @apply border-cobalt bg-cobalt ring-4 ring-cobalt/15; }
-.execution-node.is-complete .execution-dot { @apply border-teal bg-teal; }
-.execution-node.is-attention .execution-dot { @apply border-copper bg-copper; }
-.execution-label { @apply text-meta text-muted; }
-.execution-node.is-active .execution-label { @apply font-semibold text-cobalt; }
-.execution-node.is-complete .execution-label { @apply text-teal; }
-.execution-node.is-attention .execution-label { @apply text-copper; }
-.question-input { @apply border-line bg-surface text-ink; }
-.question-input::placeholder { @apply text-quiet; }
-.question-input:focus { @apply border-cobalt shadow-focus outline-none; }
-.suggestion-chip { @apply rounded-full border border-line bg-canvas px-3 py-2 text-left text-meta text-muted; }
-.suggestion-chip:hover { @apply border-cobalt/60 bg-cobalt/5 text-cobalt; }
-.result-card { @apply border-teal/30 shadow-panel; }
-.result-answer { max-width: 62rem; }
-.stable-chart { min-height: 330px; }
-.stable-skeleton { min-height: 156px; }
+  /* Chart palette — validated for colour-vision deficiency (dataviz reference palette). */
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+  --series-5: #e87ba4; --series-6: #008300; --series-7: #4a3aa7; --series-8: #e34948;
+  --chart-grid: #e8eaee;
+  --chart-axis: #cbd1da;
+  --chart-text: #5b6474;
+  --chart-pos: 42 120 214;
+  --chart-neg: 227 73 72;
+}
 
-@keyframes app-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: 11 13 18;
+  --surface: 18 21 28;
+  --sunken: 24 28 37;
+  --line: 38 43 54;
+  --line-strong: 55 62 77;
+  --fg: 231 234 240;
+  --muted: 160 168 182;
+  --subtle: 111 120 137;
+  --primary: 120 150 247;
+  --primary-fg: 11 13 18;
+  --primary-soft: 28 37 66;
+  --success: 72 199 146;
+  --success-soft: 17 43 34;
+  --warning: 242 179 61;
+  --warning-soft: 47 35 14;
+  --danger: 240 113 103;
+  --danger-soft: 52 22 22;
+  --ai: 177 151 252;
+  --ai-soft: 38 30 64;
+  --shadow: 0 0 0;
+
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+  --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+  --chart-grid: #232833;
+  --chart-axis: #373e4d;
+  --chart-text: #a0a8b6;
+  --chart-pos: 57 135 229;
+  --chart-neg: 230 103 103;
+}
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    @apply bg-bg font-sans text-[15px] leading-6 text-fg antialiased;
+    min-height: 100dvh;
+    font-feature-settings: 'tnum' 0;
+  }
+  :focus-visible { @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-bg; }
+  ::selection { background: rgb(var(--primary) / 0.2); }
+  table { font-variant-numeric: tabular-nums; }
+  code, pre, kbd { @apply font-mono; }
+}
+
+@layer components {
+  .card { @apply rounded-lg border border-line bg-surface shadow-card; }
+  .eyebrow { @apply text-2xs font-semibold uppercase tracking-[0.08em] text-muted; }
+  .num { font-variant-numeric: tabular-nums; }
+  .skeleton {
+    @apply rounded bg-sunken;
+    background-image: linear-gradient(90deg, transparent, rgb(var(--line) / 0.8), transparent);
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+  .scroll-thin { scrollbar-width: thin; scrollbar-color: rgb(var(--line-strong)) transparent; }
+  .prose-answer p + p { @apply mt-2; }
+}
+
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+/* Native <dialog> used for the column sheet and confirmations. */
+dialog::backdrop { background: rgb(var(--shadow) / 0.45); backdrop-filter: blur(1px); }
+dialog[open] { animation: fade-in 160ms ease-out; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
 @media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
-  .app-shell { animation: none; }
-  button { transition: none; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
+
+/* Recharts focus outlines: keyboard focus stays visible, mouse clicks do not draw boxes. */
+.recharts-wrapper:focus, .recharts-surface:focus { outline: none; }
+.recharts-wrapper:focus-visible { outline: 2px solid rgb(var(--primary)); outline-offset: 4px; border-radius: 6px; }

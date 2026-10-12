@@ -56,3 +56,13 @@ export const DEMO_COLUMNS = ['date', 'customer_id', 'segment', 'region', 'catego
   'product', 'units', 'revenue', 'cost', 'profit', 'status', 'channel'];
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** The demo rows as a raw table, so the demo goes through the same import pipeline as an upload. */
+export function demoTable(): { headers: string[]; rows: (string | number)[][]; notes: string[] } {
+  const rows = generateDemoRows();
+  return {
+    headers: DEMO_COLUMNS,
+    rows: rows.map((r) => DEMO_COLUMNS.map((c) => r[c as keyof DemoRow])),
+    notes: ['Synthetic e-commerce orders generated from a fixed seed, so every run produces identical data.'],
+  };
+}

@@ -1,212 +1,178 @@
-# InsightLab — AI Data Analyst
+# InsightLab — AI data analyst
 
-**Ask questions. Understand your data. Make better decisions.**
+Import a CSV or Excel file, check its structure and quality, and ask questions in plain English.
+Every answer is **computed from your rows** with read-only SQL and deterministic statistics; when an
+Anthropic API key is configured, Claude chooses the analysis and writes an interpretation that is
+**checked against the computed numbers** and labelled separately.
 
-> InsightLab is an AI-assisted data-analysis application that lets users upload CSV datasets, ask
-> questions in natural language, inspect generated SQL and Python, and explore computed results
-> through interactive visualizations. It demonstrates schema-driven planning, tool-oriented
-> analysis, read-only SQL validation, data-quality profiling, restricted Python execution, and
-> reproducible analytics workflows.
+Status: **v0.2.0**. See [`PORTFOLIO_STATUS.md`](PORTFOLIO_STATUS.md) for exactly what has been
+verified and what has not.
 
-Status: **portfolio-quality v0.1.0**, not production-ready. See `PORTFOLIO_STATUS.md` and
-`RELEASE_NOTES.md` for exactly what has been verified by execution and what has not.
+## What it does
 
-Upload a CSV or load a deterministic demo dataset, ask questions in plain English, and get an
-answer backed by generated read-only SQL, generated Pandas code, a chart, a results table, stated
-assumptions, and a full execution trace. Nothing in the answer is hardcoded: every number comes
-from a query executed against the dataset you loaded.
-
----
-
-## Features
-
-| Area | What it does |
+| Area | Details |
 |---|---|
-| Data sources | CSV upload (delimiter/header/type detection) and a seeded demo dataset, both loaded into in-memory SQLite |
-| Profiling | Per-column type inference, null counts, uniqueness, min/max/mean, and data-quality warnings |
-| Agent | Structured planning → typed operation → SQL/Python generation → validation → execution → hedged explanation |
-| SQL safety | Keyword validator + AST parser, statement-stacking and comment-bypass rejection, mandatory LIMIT, `query_only` connection |
-| Python safety | AST allowlist validation, forked child process, `setrlimit`, cleared environment, reduced builtins, output caps |
-| Transparency | Answer, chart, table, SQL, Python, plan JSON, and a per-tool timing trace are all inspectable |
-| Reproducibility | Deterministic demo data + visible SQL/Python + downloadable CSV/JSON results |
+| Import | Drag-and-drop or file picker with upload progress. CSV/TSV (delimiter, encoding, quoting detection) and Excel `.xlsx` (first non-empty sheet). Type inference per column: numbers (currency, thousands separators, decimal commas, `%`, accounting negatives), dates (ISO, day/month or month/day decided from the data), yes/no, categories, IDs, text. Every assumption is shown. |
+| Validation | Size, row and column limits; empty, header-only, malformed, binary, disguised and legacy `.xls` files are rejected with specific messages. Excel archives are checked for decompression bombs before parsing. |
+| Explore | Overview with row/column counts, missing cells, duplicate rows and a data-quality panel (missing values, unreadable values, inconsistent spellings, constant columns, negatives where unexpected, outliers). Column drill-down with statistics and distribution charts. Server-paged data browser with sort, full-text search and typed filters. Read-only SQL editor. |
+| Ask | Questions become a typed **analysis spec** (aggregate/trend/ranking, distribution, correlation, relationship, describe, outliers, row listing, data quality). A guard checks every column and type against the real schema before anything runs. Results stream back with real progress stages and can be cancelled. |
+| Answers | Calculated result (summary + key figures), chart chosen from the result's shape, table, SQL, assumptions, caveats (partial periods, missing groups, truncation), and a step trace. With AI: a labelled interpretation, a grounding check that flags any figure not found in the computed results, and follow-up suggestions. Clarifying questions and honest "cannot answer" replies instead of guesses. |
+| Export & persistence | Datasets and conversations are stored on the server for `DATASET_RETENTION_HOURS` (default 24) and survive reloads and restarts; delete them any time. Export tables as CSV, charts as PNG/SVG, and the whole session as a Markdown report. |
+| Design | Light and dark themes, responsive layouts down to 375 px, keyboard navigation, visible focus, reduced-motion support, colour-blind-safe validated chart palette. |
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-  U[Browser workspace] -->|POST /api/datasources| ING[CSV ingestion + profiling]
-  ING --> SQ[(In-memory SQLite<br/>table: dataset)]
-  U -->|POST /api/analyze| ORC[Analysis orchestrator]
-  ORC --> PROV{LlmProvider}
-  PROV -->|default| LOCAL[LocalPlanner<br/>deterministic]
-  PROV -->|LLM_PROVIDER=anthropic| ANTH[AnthropicPlanner<br/>falls back to local]
-  ORC --> GUARD[guardPlan<br/>columns must exist in schema]
-  GUARD --> BLD[buildSql / buildPython<br/>from typed plan only]
-  BLD --> VAL[validateSql<br/>keywords + AST + LIMIT]
-  VAL --> SQ
-  BLD --> PY[FastAPI analysis service<br/>AST allowlist + rlimits]
-  SQ --> OUT[Answer + chart + table + trace]
-  PY --> OUT
+  UI[Next.js app router UI] -->|upload / demo| ING[Import: CSV + XLSX parsing, type inference, profiling]
+  ING --> STORE[(DATA_DIR / dataset id: data.sqlite + meta.json + analyses.json)]
+  UI -->|question| ORCH[Orchestrator - NDJSON stream]
+  ORCH --> PLAN{Planner}
+  PLAN -->|key configured| CLAUDE[Claude: structured output -> Plan]
+  PLAN -->|no key| RULES[Rule-based planner]
+  CLAUDE --> GUARD[Guard: columns + types vs real schema]
+  RULES --> GUARD
+  GUARD --> COMPUTE[Compute: parameterised read-only SQL + TS statistics -> facts + chart]
+  COMPUTE --> STORE
+  COMPUTE --> XCHECK[Optional pandas cross-check service]
+  COMPUTE --> NARR[Claude narrative] --> GROUND[Grounding check: every figure vs computed facts]
 ```
 
-### Agent workflow
+```
+src/
+  app/                 routes: / (import), /datasets/[id] (overview, data, ask, sql), /api/*
+  components/          ui primitives, import flow, workspace tabs, analysis thread, charts
+  lib/
+    config.ts          validated environment configuration (server only)
+    ingest/            CSV/XLSX parsing, header normalisation, value parsing and type inference
+    profile.ts stats.ts column profiles, quality findings, statistics helpers
+    store/             disk-backed dataset store with retention; saved conversations
+    query/             SQL builder (quoted identifiers, bound parameters), validator, executor
+    analysis/          spec schema, guard, rule planner, Claude planner/narrator, compute, charts, grounding, cross-check
+services/analysis/     optional FastAPI pandas sandbox used for cross-checks (Linux/Docker)
+```
 
-1. `get_dataset_schema` / `get_column_profile` / `get_sample_rows` — inspect the real dataset.
-2. `create_analysis_plan` — the provider returns an `AnalysisPlan` containing a **typed
-   `operation`** (`trend` | `group` | `share` | `correlation` | `quality` | `none`).
-3. `guard_plan` — every column the plan names must exist in the schema, otherwise the analysis is
-   downgraded to *unsupported*. This is what makes a model-authored plan safe to execute.
-4. `buildSql` / `buildPython` — SQL is assembled from the typed operation with quoted identifiers.
-   **User text never reaches the query string.**
-5. `validate_sql` → `execute_read_only_sql` → optional `execute_python_analysis`.
-6. `validate_output` — checks finiteness, truncation, and that the chart config matches the columns
-   actually returned.
-7. Explanation — observations, hypotheses, assumptions and limitations are kept distinct.
+### How answers stay grounded
 
-### Tools
+1. The planner (Claude or rules) can only return a **typed spec** — never SQL or numbers.
+2. The **guard** resolves every column against the real schema, rejects type misuse (e.g. summing text), coerces filter values, and clamps sizes. If Claude names a column that does not exist, it gets one chance to repair the plan.
+3. **SQL is generated from the spec** with quoted identifiers and bound parameters, validated as a single read-only SELECT, and run on a connection opened read-only.
+4. **Facts** (totals, extremes, changes, shares, correlations…) are computed deterministically and are the only numbers the narrative may use.
+5. The **grounding check** extracts every number from the AI text and matches it against facts and table cells, allowing for display rounding; unmatched figures are shown to the user.
+6. Failures are shown as failures. If the narrative fails, the computed answer is still shown with a note.
 
-| Tool | Location |
-|---|---|
-| `get_dataset_schema` | `DataSource.schema()` |
-| `get_column_profile` | `DataSource.profile()` |
-| `get_sample_rows` | `DataSource.sample()` |
-| `validate_sql` | `src/lib/sql-validator.ts` |
-| `execute_read_only_sql` | `SqliteDataSource.executeReadOnlyQuery()` |
-| `execute_python_analysis` | `services/analysis` (`POST /execute`) |
-| `create_chart` | `buildChart()` in `src/lib/agent/orchestrator.ts` |
-| `export_analysis` | `POST /api/export` |
+## Run locally
 
-### Data-source model
-
-`src/lib/datasource/index.ts` defines the `DataSource` interface. `SqliteDataSource` implements it
-for CSV and demo data. The agent depends only on the interface, so a `PostgresDataSource` needs a
-new file implementing the same methods — no planner, validator, or orchestrator changes.
-
-### SQL safety model
-
-Four independent layers: (1) SQL is built from a typed plan, never string-concatenated from user
-input; (2) `validateSql` strips comments, rejects stacked statements, rejects mutating/DDL/file
-keywords, requires a leading `SELECT`/`WITH`, and appends a `LIMIT`; (3) `node-sql-parser` confirms
-the AST is a single SELECT; (4) the connection runs with `PRAGMA query_only = true`, so a write that
-somehow got through would still fail at the driver.
-
-### Python sandbox model
-
-`validator.py` walks the AST and rejects anything outside an allowlist (`pandas`, `numpy`, `math`,
-`statistics`, `datetime`, `json`), plus all dunder access and `eval`/`exec`/`open`/`getattr`.
-`runner.py` then forks a child that applies `RLIMIT_CPU`, `RLIMIT_AS`, `RLIMIT_NPROC=0` (no
-fork/subprocess) and `RLIMIT_FSIZE=0`, clears `os.environ`, and executes with a reduced builtins
-mapping exposing only `pd`, `np`, `df`. Results are serialised to JSON and row-capped.
-
----
-
-## Local setup
+Requirements: Node.js 22 (tested with 22.23). Python is only needed for the optional cross-check service.
 
 ```bash
-git clone <your-fork> insightlab && cd insightlab
-cp .env.example .env
 npm ci
-npm run dev            # http://localhost:3000
 ```
-
-Optional Python analysis service (in a second terminal):
 
 ```bash
-cd services/analysis
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --host 127.0.0.1 --port 8000
+cp .env.example .env
 ```
 
-Or both at once:
+```bash
+npm run dev
+```
+
+Open http://localhost:3000 and click **Open demo dataset**, or drop in a file.
+
+Production build:
+
+```bash
+npm run build
+```
+
+```bash
+npm start
+```
+
+### Enable Claude
+
+Add your key to `.env` and restart:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+LLM_MODEL=claude-opus-5-5
+```
+
+Leave `LLM_PROVIDER` empty (auto) or set it to `anthropic`. Without a key — or with
+`LLM_PROVIDER=local` — the app uses the rule-based planner and says so in the UI.
+What is sent to Anthropic: column names and types, summary statistics, the most common values of
+category columns, the question, recent questions, and (for the interpretation) the computed result
+table, capped at 40 rows. Raw rows are never sent for planning.
+
+### Optional pandas cross-check (Linux / Docker)
 
 ```bash
 docker compose up --build
 ```
 
-### Environment variables
+or, on Linux/macOS:
+
+```bash
+cd services/analysis && python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt && uvicorn main:app --host 127.0.0.1 --port 8000
+```
+
+then set `PYTHON_SERVICE_URL=http://127.0.0.1:8000`. The sandbox uses `fork` and `resource`
+limits, so it does not run natively on Windows.
+
+## Configuration
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `LLM_PROVIDER` | `local` | `local` (deterministic, offline) or `anthropic` |
-| `ANTHROPIC_API_KEY` | — | Server-side only. Never sent to the browser |
-| `LLM_MODEL` | `claude-sonnet-4-6` | Model for the Anthropic adapter |
-| `PYTHON_SERVICE_URL` | — | Unset ⇒ Python is generated but not validated or executed locally |
-| `MAX_UPLOAD_BYTES` | `5242880` | Upload cap |
-| `MAX_QUERY_ROWS` | `1000` | Row cap applied as a mandatory `LIMIT` |
-| `QUERY_TIMEOUT_MS` | `10000` | SQL time budget |
-| `PYTHON_TIMEOUT_MS` | `15000` | Sandbox deadline |
-| `LLM_TIMEOUT_MS` | `20000` | Anthropic request deadline before deterministic fallback |
+| `LLM_PROVIDER` | auto | empty = Anthropic when a key is set; `local` = never call an AI service |
+| `ANTHROPIC_API_KEY` | — | Server-side only |
+| `LLM_MODEL` | `claude-opus-5-5` | Model for planning and interpretation |
+| `LLM_TIMEOUT_MS` | `60000` | Per-request deadline (the SDK also retries 429/5xx twice) |
+| `LLM_BASE_URL` | `https://api.anthropic.com` | Only for a gateway; `ANTHROPIC_BASE_URL` is ignored on purpose |
+| `DATA_DIR` | `./.data` | Where datasets and conversations are stored |
+| `DATASET_RETENTION_HOURS` | `24` | Automatic deletion age |
+| `MAX_DATASETS` | `50` | Oldest datasets are deleted beyond this |
+| `MAX_UPLOAD_BYTES` | `26214400` | Upload size limit |
+| `MAX_ROWS` / `MAX_COLUMNS` | `250000` / `250` | Import limits |
+| `MAX_QUERY_ROWS` | `1000` | Rows returned per result |
+| `QUERY_TIMEOUT_MS` | `10000` | SQL time budget (checked after execution) |
+| `PYTHON_SERVICE_URL` | — | Enables the pandas cross-check |
 
-CSV headers must use letters, numbers, underscores, and spaces; the first character must be a letter or underscore. Unsupported header characters are rejected before the dataset is created so they cannot fail later during SQL generation.
+Invalid numeric values fall back to defaults and are logged once at startup.
 
-Use `127.0.0.1`, not `localhost`, for `PYTHON_SERVICE_URL`: Node resolves `localhost` to `::1`
-first while uvicorn binds IPv4, which fails silently.
-
-### Demo
-
-Click **Load demo dataset** — 270 days of seeded e-commerce orders (~810 rows, 12 columns),
-identical on every run, including ~3% missing regions so the data-quality path is visible.
-
-### Demo questions
-
-These work against the demo dataset and each exercises a different path:
-
-1. *How has revenue changed over time?* — monthly SQL aggregation + line chart.
-2. *Which category has the highest profit?* — grouped ranking + bar chart.
-3. *Which columns have the most missing data?* — profiling path, no SQL.
-
-Also worth trying: *What are the strongest correlations between numeric variables?* (correlation
-table), *Which is best?* (asks which metric you mean), and *What is the weather forecast for Tirana?*
-(refuses instead of inventing an answer).
-
-### Test commands
+## Tests
 
 ```bash
-npm run typecheck                           # tsc --noEmit
-npm test                                    # Vitest — 54 tests
-npm run build                               # production build
-npm start & npm run smoke                   # 18 HTTP checks against a running server
-npm run test:e2e                            # Playwright (run `npx playwright install chromium` first)
-cd services/analysis && pytest tests -q     # Pytest — 18 tests
+npm run typecheck
 ```
 
-`npm run smoke` covers demo load, CSV upload and profiling, a real analysis, five unsafe-SQL
-rejections, the row limit, an empty result, an off-topic refusal, a clarification, prompt injection
-inside cell values, an unknown session, and request-body validation.
+```bash
+npm test
+```
 
-Continuous integration runs type checking, unit tests, the production build, and Python tests on every push and pull request.
+```bash
+npm run build
+```
 
-## Honest limitations
+```bash
+npm run test:e2e
+```
 
-Full list in `PORTFOLIO_STATUS.md`. The short version:
+```bash
+npm run smoke
+```
 
-- The Python sandbox is language-level, not kernel-level. Do not expose the service publicly.
-- SQL timeouts are enforced after the statement returns (better-sqlite3 is synchronous, with no
-  interrupt handle). Work is bounded up front by the mandatory `LIMIT`.
-- Sessions live in process memory with a TTL, so datasets vanish on restart and do not scale past
-  one instance.
-- There is no authentication and no per-user ownership check.
-- PostgreSQL and MySQL adapters do not exist yet; the interface is ready for them.
-- Charts cover line and bar only.
-- The `AnthropicPlanner` adapter has never been executed against the live API.
+- `npm test` — Vitest: import parsing and type inference, Excel, SQL safety, the dataset store, every analysis kind against independently recomputed values, the rule planner, the grounding check, and the **real Anthropic SDK path against a local stand-in API** (request shape, structured output parsing, plan repair, refusals, 401/429 handling, cancellation).
+- `npm run test:e2e` — Playwright against a production server on port 3100 (run `npm run build` first; `npx playwright install chromium`, or set `E2E_CHANNEL=msedge`/`chrome` to use an installed browser).
+- `npm run smoke` — 25 HTTP checks against a running server (`SMOKE_BASE_URL`, default `http://localhost:3000`).
+- `cd services/analysis && python -m pytest -q` — sandbox tests (Linux).
 
-## Deployment notes
+## Security and privacy
 
-The web app needs a Node runtime (not edge) because `better-sqlite3` is native. The analysis service
-should never be exposed publicly — keep it on an internal network as in `docker-compose.yml`, and
-run it under gVisor or a per-request microVM for untrusted input.
-
-## Roadmap
-
-1. Authentication plus per-session ownership checks — required before any deployment.
-2. SQL execution in a `worker_thread` so queries can be cancelled rather than timed after the fact.
-3. A `PostgresDataSource` behind the existing interface, proving the abstraction holds.
-4. Run the Playwright suite in CI with browsers installed.
-5. Exercise the `AnthropicPlanner` against the live API and assert `guardPlan` rejects hallucinated
-   columns.
-6. Streaming stage updates over SSE; saved insights with persistence; scatter/histogram/box/heatmap
-   charts.
+- API keys stay on the server; the browser only sees `/api/status` (provider, model name, limits).
+- Uploads are validated by extension **and** content; file contents are never logged.
+- Dataset ids are random 128-bit tokens validated before any filesystem access; there is no endpoint that lists other people's datasets. The home page's "recent datasets" list lives in the browser's local storage.
+- There is **no authentication**: anyone who can reach the server and knows a dataset id can open it. Do not expose the app publicly without adding auth.
+- SQL is read-only at three layers (validator, parser, read-only connection). AI output is never executed; the pandas cross-check runs code generated from the spec, not by the model.
 
 ## License
 

@@ -1,94 +1,44 @@
-# InsightLab v0.1.0
+# InsightLab v0.2.0
 
-**Release name:** InsightLab v0.1.0 — portfolio release
-**Status:** portfolio-quality. Not production-ready; see limitations below.
+A rebuild of the application around one rule: numbers are computed from the data, and anything a
+language model writes is labelled and checked against those numbers.
 
-## What is included
+## Highlights
 
-- **Next.js 16 app** (App Router, TypeScript, Tailwind): workspace UI with dataset overview, column
-  profiles, data-quality panel, question input with schema-derived suggestions, and result cards
-  exposing Answer, Visualization, Data, SQL, Python, Plan and Trace tabs.
-- **7 typed API routes**: create data source (demo or CSV upload), profile, sample, validate SQL,
-  execute read-only SQL, analyze, export.
-- **Data-source abstraction** with an in-memory SQLite implementation; CSV and demo data are loaded
-  into a real `dataset` table, so SQL execution is real SQL.
-- **Deterministic demo dataset**: 820 seeded e-commerce rows across 12 columns, byte-identical on
-  every run, including ~3% missing regions so data-quality handling is visible.
-- **Agent layer**: `LlmProvider` interface, a fully functional offline `LocalPlanner`, and an
-  `AnthropicPlanner` adapter; `guardPlan` validates every plan column against the real schema.
-- **Four-layer SQL safety** and a **FastAPI Python sandbox** (AST allowlist, forked child,
-  `setrlimit`, cleared environment, reduced builtins, output caps).
-- **Tests**: 54 Vitest, 18 Pytest, an 18-check HTTP smoke suite, and a Playwright suite that has not
-  yet been run.
-- Docs: `README.md`, `PORTFOLIO_STATUS.md`, this file, `.env.example`, `.gitignore`, MIT `LICENSE`,
-  `docker-compose.yml` and two Dockerfiles.
+- **Working AI integration.** The previous Anthropic adapter asked the model for "the AnalysisPlan
+  as defined in src/lib/types.ts" without ever sending the schema, so it could essentially never
+  produce a valid plan and silently fell back to the rule planner. It is replaced by the official
+  SDK with structured outputs (Zod schema), a guard against invented columns with one repair attempt,
+  a separate interpretation step, a numeric grounding check, refusal and error handling, and
+  cancellation. Default model: `claude-opus-5-5`.
+- **Richer analysis.** Typed specs for aggregates (0–2 groupings, time grains, filters, top-N, shares),
+  distributions, correlation matrices, two-variable relationships, summaries, outliers, row listings
+  and data quality — replacing five hard-coded operations.
+- **Real import pipeline.** Excel `.xlsx`, encoding detection, decimal commas, currency and percent
+  values, day/month date detection, query-safe header renaming (headers such as `Unit Price ($)` used
+  to be rejected), case-insensitive duplicate headers, null tokens (`N/A`, `-`, …).
+- **Persistence.** Datasets and conversations are stored on disk with automatic deletion, so a reload
+  or restart no longer loses work. Delete from the UI.
+- **New interface.** Workspace with Overview, Data, Ask and SQL tabs; drag-and-drop upload with
+  progress; column drill-down; server-paged data browser; conversation thread with live stages,
+  cancellation and retry; chart export; Markdown report export; light/dark themes; mobile layouts.
 
-## Verification results
+## Bugs fixed
 
-| Check | Result |
-|---|---|
-| `npm run typecheck` | clean |
-| `npm run build` | compiled successfully, 9 routes |
-| `npm test` | 54 passed / 54 |
-| `pytest tests -q` (sandbox) | 18 passed / 18 |
-| `node scripts/smoke.mjs` (HTTP) | 18 passed / 18 |
-| Unsafe SQL rejection | verified (5 statement classes over HTTP, 9 in unit tests) |
-| Unsafe Python rejection | verified (imports, eval/exec/open/getattr, dunder walking, timeout) |
-| Empty result | verified — 0 rows returned cleanly |
-| Off-topic question | verified — refused, no invented answer |
-| CSV upload + profiling | verified |
-| Demo analysis | verified — SQL, 9 monthly rows, line chart, computed figures |
-| Docker | **not verified** — no Docker daemon available |
-| Browser / UI | **not verified** — Playwright browser binaries unavailable in the build sandbox |
-| Anthropic adapter | **not verified** — no API key available |
+- Fake progress: the old UI cycled through stage names on a 400 ms timer regardless of what the
+  server was doing. Stages now come from the server as they happen.
+- Dates in `MM/DD/YYYY` were grouped by `substr(date, 1, 7)`, producing garbage months. Dates are now
+  normalised to ISO at import.
+- One unparseable value (e.g. `N/A`) turned a numeric column into text.
+- A group of rows with a missing category could be reported as the "highest" group.
+- Bar charts used a `[0, auto]` axis that broke for negative values; lines used smoothing that drew
+  values the data does not contain.
+- The keyword SQL validator rejected legitimate columns such as `"Last Update"` and flagged any query
+  containing a string literal as unterminated.
+- Column names differing only in case collided in SQLite.
+- `next` 16.3.6 had published high-severity advisories; upgraded to 16.4.0.
 
-## Known limitations
+## Removed
 
-Post-hoc SQL timeouts; a language-level (not kernel-level) Python sandbox; in-process session
-storage; no authentication or ownership checks; no PostgreSQL/MySQL adapters; line and bar charts
-only; a rule-based local planner that refuses unfamiliar phrasing rather than guessing. Full detail
-in `PORTFOLIO_STATUS.md`.
-
-## Security notes
-
-- SQL is built from typed plan objects with quoted identifiers; the user's question text never
-  reaches the query string.
-- Read-only is enforced at two levels: the validator rejects the text, and `PRAGMA query_only` makes
-  the connection refuse writes regardless.
-- Dataset values — including cells reading "ignore previous instructions" — are treated as data, and
-  a test asserts this.
-- No credentials, `.env` files, datasets or build artifacts are in the repository. `.env.example`
-  contains placeholders only.
-- The analysis service must stay on an internal network. Do not expose it publicly.
-
-## How to run locally
-
-```bash
-unzip insightlab-v0.1.0.zip && cd insightlab
-cp .env.example .env
-npm install
-npm run dev                 # http://localhost:3000
-```
-
-Optional Python analysis service (second terminal):
-
-```bash
-cd services/analysis
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --host 127.0.0.1 --port 8000
-```
-
-Then set `PYTHON_SERVICE_URL=http://127.0.0.1:8000` in `.env` and restart the dev server.
-
-## Three example demo questions
-
-1. **How has revenue changed over time?** — monthly SQL aggregation, line chart, trend answer.
-2. **Which category has the highest profit?** — grouped ranking, bar chart, share of total.
-3. **Which columns have the most missing data?** — profiling path, no SQL, quality findings.
-
-## Three recommended next steps
-
-1. `npx playwright install chromium && npm run test:e2e` to close the UI verification gap.
-2. Add authentication and per-session ownership checks before deploying anywhere.
-3. Implement a `PostgresDataSource` behind the existing interface to prove the abstraction.
+- `/api/export` (export now happens in the browser), `/api/sql/validate` (merged into the query
+  endpoint), and the old `datasources` routes (replaced by `/api/datasets`).
